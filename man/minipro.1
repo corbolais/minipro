@@ -7,7 +7,7 @@ minipro \- programs various chips using the Minipro TL866XX series of programmer
 .RB [-p " device"]
 .RB [-c " code|data|config"]
 .RB [-r|-w " filename"]
-.RB [-e] [-u] [-P] [-i|-I]
+.RB [-e] [-u] [-P] [-i|-I] [-v] [-s|-S] [-y] [-h]
 
 .B miniprohex
 .RB [-p " device"]
@@ -17,10 +17,10 @@ minipro \- programs various chips using the Minipro TL866XX series of programmer
 
 .SH DESCRIPTION
 .I minipro
-is an Open Source tool intended to become a complete cross-platform 
-replacement for the proprietary utility from Autoelectric. Currently it 
-supports more than 13000 of target devices - including AVRs, PICs as 
-well as a huge number of other microcontrollers and various memory 
+is an Open Source tool intended to become a complete cross-platform
+replacement for the proprietary utility from Autoelectric. Currently it
+supports more than 13000 of target devices - including AVRs, PICs as
+well as a huge number of other microcontrollers and various memory
 chips.
 
 
@@ -31,13 +31,14 @@ Get a list of supported devices.
 
 .TP
 .B \-p <device>
-Specify the device name.  If the desired device name contains a space, 
+Specify the device name.  If the desired device name contains a space,
 parenthesis, or at sign; the device name MUST be surrounded by quotes.
 
 .TP
 .B \-c <type>
-Optionally specify memory type.  Possible values include "code", "data", 
-and "config".
+Optionally specify memory type.  Possible values include "code", "data",
+and "config". The "config" memory type is used to access fuses, see
+FUSES below.
 
 .TP
 .B \-r <filename>
@@ -72,8 +73,25 @@ Use ICSP.
 Use ICSP (without enabling Vcc).
 
 .TP
+.B \-s
+Do NOT error on file size mismatch (only a warning).
+
+.TP
+.B \-S
+No warning message for file size mismatch (can't combine with -s).
+
+.TP
+.B -x
+Do NOT attempt to read ID (only valid in read mode).  Avoids sending
+high Chip ID read voltages to unknown pins.
+
+.TP
 .B \-y
 Do NOT error on ID mismatch.
+
+.TP
+.B \-h
+Show help and quit.
 
 .SH NOTES
 
@@ -81,46 +99,58 @@ If
 .B -c
 is omitted and
 .B -r
-is specified then the code, data (if applicable) and config (if 
-applicable) will be read from filename.$ext, filename.eeprom.$ext and 
-filename.config.txt correspondingly. If
+is specified then the code, data (if applicable) and config (if
+applicable) will be written to filename.$ext, filename.eeprom.bin and
+filename.fuses.conf correspondingly. If
 .B -c
 is omitted and
 .B -w
-is specified then
+is specified, then
 .B -c code
-is getting enforced.
+is assumed.
 
 The
 .B -i
 and
 .B -I
-options enable use of ICSP port for TL866A models. The former enables 
-the voltage supply on the Vcc pin of the ICSP port while the latter 
+options enable use of ICSP port for TL866A models. The former enables
+the voltage supply on the Vcc pin of the ICSP port while the latter
 leaves it off.  These options are of no use for the TL866CS.
 
-The Minipro TL866xx series of chip programmers is distributed by 
+The Minipro TL866xx series of chip programmers is distributed by
 Autoelectric.  Their website is
 .BR http://www.autoelectric.cn.
 
+.SH FUSES
+
+Fuses can be read and written with the
+.B -c config
+option. Fuse data is exchanged in a text format. When writing fuses
+all fuses on your device must be assigned a value. To see what fuses
+are supported by your device use
+.B -r
+with
+.B -c config
+to get your current fuse values. This also shows you what the text
+format looks like.
+
 .SH AUTHOR
 .I minipro
-was written by Valentin Dudouyt and is copyright 2014.  Many others 
+was written by Valentin Dudouyt and is copyright 2014.  Many others
 have contributed code and bug reports.
 
 .SH DISTRIBUTION
-The canonical repository for 
+The canonical repository for
 .I minipro
 is at Github:
 .br
 .BR https://github.com/vdudouyt/minipro
 .br
-It is distributed under the GNU General Public License version 2 or (at 
+It is distributed under the GNU General Public License version 2 or (at
 your option) any later version.
 .br
 .BR http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 .br
-This software is offered as-is with no warranty or liability.  If you 
-find a bug or would like minipro to do something it doesn't currently 
+This software is offered as-is with no warranty or liability.  If you
+find a bug or would like minipro to do something it doesn't currently
 do, please visit the above Github website and report your concerns.
-

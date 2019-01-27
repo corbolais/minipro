@@ -13,9 +13,12 @@ DESTDIR = debian/minipro
 override_dh_auto_install:
 	make install \
 	    DESTDIR=$(DESTDIR) \
-	    PREFIX=/usr \
-	    UDEV_RULES_DIR=$(DESTDIR)/lib/udev/rules.d \
-	    COMPLETIONS_DIR=$(DESTDIR)/usr/share/bash-completion/completions
+	    PREFIX=/usr
+
+override_dh_installudev:
+	cp udev/debian/60-minipro.rules debian/minipro.udev
+	dh_installudev
+	rm -f debian/minipro.udev
 
 %:
-	dh $@
+	dh $@ --with bash-completion

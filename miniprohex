@@ -5,9 +5,9 @@ then
 miniprohex by Al Williams http://www.awce.com
 Usage:
   miniprohex [--o offset] [--unfill byte size] [--obs blksize] [--line-length length] [minipro_options] -r filename.ext
-  miniprohex [--o offset] [minirpo_options] -w filename.ext
+  miniprohex [--o offset] [minipro_options] -w filename.ext
 
-This calls minipro after converting known file types to 
+This calls minipro after converting known file types to
 .bin for writing or converting bin files after reading.
 
 --o: Offset for file conversion (see srec_cat)
@@ -57,14 +57,14 @@ do
       shift
       continue
   fi
-  if [ "$1" == "--offset" ] 
+  if [ "$1" == "--offset" ]
   then
       SRECOPTS="$SRECOPTS $1 $2"
       shift
       shift
       continue
   fi
-  if [ "$1" == "-r" ] 
+  if [ "$1" == "-r" ]
   then
     RWOPT=-r
     shift
@@ -74,6 +74,20 @@ do
     RWOPT=-w
     shift
     FN=$1
+  elif [ "$1" == "-p" ]
+  then
+    if [ -z "$DEVICE" ]
+    then
+      shift
+      DEVICE="-p '$1'"
+      shift
+      continue
+    else
+      echo "Ignoring duplicate -p flag!"
+      shift
+      shift
+      continue
+    fi
   else
     OPTS="$OPTS $1"
   fi
@@ -110,20 +124,23 @@ RFILE="$FN"
 PRECVT=
 POSTCVT=
 ;;
-*) 
+*)
 # Who knows?
 RFILE="$FN"
 PRECVT=
 POSTCVT=
 esac
+
+DOIT="./minipro $OPTS $DEVICE $RWOPT $RFILE"
+
 # If we write, do PRECMD and execute
 if [ $RWOPT == -w ]
 then
 $PRECVT
-./minipro $OPTS $RWOPT $RFILE
+eval $DOIT
 else
 # If reading, execute and then do post cmd
-./minipro $OPTS $RWOPT $RFILE
+eval $DOIT
 $POSTCVT
 fi
 

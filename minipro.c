@@ -1,6 +1,24 @@
+/*
+ * minipro.c - Low level operations.
+ *
+ * This file is a part of Minipro.
+ *
+ * Minipro is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Minipro is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
+
 #include <libusb.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #ifdef __APPLE__
 #include <stdio.h>
 #else
@@ -25,8 +43,18 @@ minipro_handle_t *minipro_open(device_t *device) {
 
 	handle->usb_handle = libusb_open_device_with_vid_pid(handle->ctx, 0x04d8, 0xe11c);
 	if(handle->usb_handle == NULL) {
-		free(handle);
-		ERROR("Error opening device");
+                // We didn't match the vid / pid of the "original" TL866 - so try the new TL866II+
+	        handle->usb_handle = libusb_open_device_with_vid_pid(handle->ctx, 0xa466, 0x0a53);
+
+                // If we don't get that either report error in connecting; otherwise report incompatability...
+	        if(handle->usb_handle == NULL) {
+                        free(handle);
+                        ERROR("Error opening device");
+                }
+                else {
+                        free(handle);
+                        ERROR("This version of the software is not compatible with the TL866 II+");
+                }
 	}
 
 	handle->device = device;
@@ -57,25 +85,25 @@ static void msg_init(unsigned char *out_buf, unsigned char cmd, device_t *device
 	format_int(&(out_buf[12]), device->code_memory_size, 4, MP_LITTLE_ENDIAN);
 }
 
-static unsigned int msg_transfer(minipro_handle_t *handle, unsigned char *buf, int length, int direction) {
+static unsigned int msg_transfer(minipro_handle_t *handle, unsigned char *buf, size_t length, int direction) {
 	int bytes_transferred;
 	int ret;
 	ret = libusb_claim_interface(handle->usb_handle, 0);
 	if(ret != 0) ERROR2("IO error: claim_interface: %s\n", libusb_error_name(ret));
-	ret = libusb_bulk_transfer(handle->usb_handle, (1 | direction), buf, length, &bytes_transferred, 0);
+	ret = libusb_bulk_transfer(handle->usb_handle, (1 | direction), buf, (int) length, &bytes_transferred, 0);
 	if(ret != 0) ERROR2("IO error: bulk_transfer: %s\n", libusb_error_name(ret));
 	ret = libusb_release_interface(handle->usb_handle, 0);
 	if(ret != 0) ERROR2("IO error: release_interface: %s\n", libusb_error_name(ret));
-	if(bytes_transferred != length) ERROR2("IO error: expected %d bytes but %d bytes transferred\n", length, bytes_transferred);
-	return bytes_transferred;
+	if(bytes_transferred != length) ERROR2("IO error: expected %zu bytes but %d bytes transferred\n", length, bytes_transferred);
+	return (unsigned int) bytes_transferred;
 }
 
 #ifndef TEST
-static unsigned int msg_send(minipro_handle_t *handle, unsigned char *buf, int length) {
+static unsigned int msg_send(minipro_handle_t *handle, unsigned char *buf, size_t length) {
 	return msg_transfer(handle, buf, length, LIBUSB_ENDPOINT_OUT);
 }
 
-static unsigned int msg_recv(minipro_handle_t *handle, unsigned char *buf, int length) {
+static unsigned int msg_recv(minipro_handle_t *handle, unsigned char *buf, size_t length) {
 	return msg_transfer(handle, buf, length, LIBUSB_ENDPOINT_IN);
 }
 #endif
@@ -87,7 +115,7 @@ void minipro_begin_transaction(minipro_handle_t *handle) {
 }
 
 void minipro_end_transaction(minipro_handle_t *handle) {
-	msg_init(msg, 0x04, handle->device, handle->icsp);
+	msg_init(msg, MP_END_TRANSACTION, handle->device, handle->icsp);
 	msg[3] = 0x00;
 	msg_send(handle, msg, 4);
 }
@@ -117,7 +145,7 @@ int minipro_get_status(minipro_handle_t *handle) {
 	return(load_int(buf, 2, MP_LITTLE_ENDIAN));
 }
 
-void minipro_read_block(minipro_handle_t *handle, unsigned int type, unsigned int addr, unsigned char *buf, unsigned int len) {
+void minipro_read_block(minipro_handle_t *handle, unsigned int type, unsigned int addr, unsigned char *buf, size_t len) {
 	msg_init(msg, type, handle->device, handle->icsp);
 	format_int(&(msg[2]), len, 2, MP_LITTLE_ENDIAN);
 	format_int(&(msg[4]), addr, 3, MP_LITTLE_ENDIAN);
@@ -125,7 +153,7 @@ void minipro_read_block(minipro_handle_t *handle, unsigned int type, unsigned in
 	msg_recv(handle, buf, len);
 }
 
-void minipro_write_block(minipro_handle_t *handle, unsigned int type, unsigned int addr, unsigned char *buf, unsigned int len) {
+void minipro_write_block(minipro_handle_t *handle, unsigned int type, unsigned int addr, unsigned char *buf, size_t len) {
 	msg_init(msg, type, handle->device, handle->icsp);
 	format_int(&(msg[2]), len, 2, MP_LITTLE_ENDIAN);
 	format_int(&(msg[4]), addr, 3, MP_LITTLE_ENDIAN);
@@ -142,19 +170,19 @@ int minipro_get_chip_id(minipro_handle_t *handle) {
 	return(load_int(&(msg[2]), handle->device->chip_id_bytes_count, MP_BIG_ENDIAN));
 }
 
-void minipro_read_fuses(minipro_handle_t *handle, unsigned int type, unsigned int length, unsigned char *buf) {
+void minipro_read_fuses(minipro_handle_t *handle, unsigned int type, size_t length, unsigned char *buf) {
 	msg_init(msg, type, handle->device, handle->icsp);
-	msg[2]=(type==18 && length==4)?2:1;  // note that PICs with 1 config word will show length==2
-	msg[5]=0x10;
+	msg[2] = (type==MP_READ_CFG && length==4)?2:1;  // note that PICs with 1 config word will show length==2
+	msg[5] = 0x10;
 	msg_send(handle, msg, 18);
-	msg_recv(handle, msg, 7 + length );
+	msg_recv(handle, msg, 7 + length);
 	memcpy(buf, &(msg[7]), length);
 }
 
-void minipro_write_fuses(minipro_handle_t *handle, unsigned int type, unsigned int length, unsigned char *buf) {
+void minipro_write_fuses(minipro_handle_t *handle, unsigned int type, size_t length, unsigned char *buf) {
 	// Perform actual writing
 	switch(type & 0xf0) {
-		case 0x10:
+		case 0x10: // MP_READ_CFG, MP_READ_USER
 			msg_init(msg, type + 1, handle->device, handle->icsp);
 			msg[2] = (length==4)?0x02:0x01;  // 2 fuse PICs have len=8
 			msg[4] = 0xc8;
@@ -164,7 +192,7 @@ void minipro_write_fuses(minipro_handle_t *handle, unsigned int type, unsigned i
 
 			msg_send(handle, msg, 64);
 			break;
-		case 0x40:
+		case 0x40: // MP_READ_LOCK, MP_PROTECT_ON
 			msg_init(msg, type - 1, handle->device, handle->icsp);
 			memcpy(&(msg[7]), buf, length);
 
@@ -174,9 +202,9 @@ void minipro_write_fuses(minipro_handle_t *handle, unsigned int type, unsigned i
 
 	// The device waits us to get the status now
 	msg_init(msg, type, handle->device, handle->icsp);
-	msg[2]=(type==18 && length==4)?2:1;  // note that PICs with 1 config word will show length==2
+	msg[2]=(type==MP_READ_CFG && length==4)?2:1;  // note that PICs with 1 config word will show length==2
 	memcpy(&(msg[7]), buf, length);
-	
+
 	msg_send(handle, msg, 18);
 	msg_recv(handle, msg, 7 + length);
 
@@ -216,7 +244,8 @@ void minipro_get_system_info(minipro_handle_t *handle, minipro_system_info_t *ou
 	// Firmware
 	out->firmware = load_int(&(buf[4]), 2, MP_LITTLE_ENDIAN);
 	if(out->firmware < MP_FIRMWARE_VERSION) {
-		fprintf(stderr, "Warning: firmware is too old\n");
+		fprintf(stderr, "Warning: Firmware is out of date.");
+		fprintf(stderr, "  Latest known version is %s.\n", MP_FIRMWARE_STRING);
 	}
 	sprintf(out->firmware_str, "%02d.%d.%d", buf[39], buf[5], buf[4]);
 }
